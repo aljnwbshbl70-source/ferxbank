@@ -193,8 +193,9 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, updateDoc, doc, onSnapshot, deleteDoc, query, orderBy, limit, where, getDocs } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, updateDoc, doc, onSnapshot, deleteDoc, query, orderBy, limit, where } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js";
 
+        // Firebase configuration
         const firebaseConfig = {
           apiKey: "AIzaSyBCrLT0ESrF9Eijh7bEQtkkdAJ3PB1WJjw",
           authDomain: "ferx-fdf0b.firebaseapp.com",
@@ -207,22 +208,6 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-
-        // إنشاء حساب المطور تلقائياً
-        async function autoCreateDev() {
-            const q = query(collection(db, "users"), where("user", "==", "developer"));
-            const snap = await getDocs(q);
-            if(snap.empty) {
-                await addDoc(collection(db, "users"), {
-                    nickname: "المطور ❤️‍🩹",
-                    user: "developer",
-                    pass: "dark65",
-                    balance: 9999999,
-                    role: "dev"
-                });
-            }
-        }
-        autoCreateDev();
 
         let users = [];
         let currentUser = null;
@@ -315,7 +300,8 @@
                 const logs = snap.docs.map(d => d.data()).filter(t => t.fromId === currentUser.id || t.toId === currentUser.id);
                 const hList = document.getElementById('historyList');
                 if(logs.length === 0) { hList.innerHTML = '<p style="opacity:0.5;text-align:center;">لا يوجد عمليات</p>'; return; }
-                hList.innerHTML = logs.map(l => { const isOut = l.fromId === currentUser.id;
+                hList.innerHTML = logs.map(l => {
+                    const isOut = l.fromId === currentUser.id;
                     return `<div class="history-item">
                         <div class="history-top">
                             <span>${isOut ? 'إلى: '+l.toName : 'من: '+l.fromName}</span>
@@ -325,42 +311,64 @@
                 }).join('');
             });
         }
-
-        window.sendMoney = async function() {
+                window.sendMoney = async function() {
             const tid = document.getElementById('targetUser').value;
             const amt = parseInt(document.getElementById('bankAmount').value);
             const msg = document.getElementById('bankMsg').value;
             const pass = document.getElementById('bankPass').value;
+
             if(!tid || isNaN(amt) || amt <= 0) return showToast("أكمل البيانات!");
             if(pass !== currentUser.pass) return showToast("كلمة المرور خطأ!");
             if(amt > currentUser.balance) return showToast("رصيدك لا يكفي!");
+
             const tu = users.find(u => u.id === tid);
             if(confirm(`تأكيد إرسال ${amt} لـ ${tu.nickname}؟`)) {
                 try {
                     await updateDoc(doc(db, "users", currentUser.id), { balance: currentUser.balance - amt });
                     await updateDoc(doc(db, "users", tid), { balance: tu.balance + amt });
                     await addDoc(collection(db, "transactions"), { 
-                        fromId: currentUser.id, fromName: currentUser.nickname, toId: tid, toName: tu.nickname, amount: amt, msg: msg, date: Date.now() 
+                        fromId: currentUser.id, 
+                        fromName: currentUser.nickname, 
+                        toId: tid, 
+                        toName: tu.nickname, 
+                        amount: amt, 
+                        msg: msg, 
+                        date: Date.now() 
                     });
-                    document.getElementById('bankAmount').value = ""; document.getElementById('bankMsg').value = ""; document.getElementById('bankPass').value = "";
+                    
+                    document.getElementById('bankAmount').value = "";
+                    document.getElementById('bankMsg').value = "";
+                    document.getElementById('bankPass').value = "";
+                    document.getElementById('bankSearch').value = "";
+                    
                     showToast("تم التحويل بنجاح ✅");
-                } catch (e) { showToast("حدث خطأ"); }
+                } catch (e) { showToast("حدث خطأ في العملية"); }
             }
         }
 
         window.buy = async function(n, p) {
-            if(activeOrder) return showToast("لديك طلب قيد المراجعة!");
+            if(activeOrder) return showToast("لديك طلب قيد المراجعة حالياً!");
             if(currentUser.balance < p) return showToast("رصيدك لا يكفي!");
-            if(confirm(`طلب شراء ${n}؟`)) {
-                await addDoc(collection(db, "orders"), { uid: currentUser.id, nick: currentUser.nickname, itemName: n, itemPrice: p, status: 'pending', date: Date.now() });
+            if(confirm(`هل تريد طلب شراء ${n}؟`)) {
+                await addDoc(collection(db, "orders"), { 
+                    uid: currentUser.id, 
+                    nick: currentUser.nickname, 
+                    itemName: n, 
+                    itemPrice: p, 
+                    status: 'pending', 
+                    date: Date.now() 
+                });
                 showToast("تم إرسال طلبك للإدارة ⏳");
             }
         }
 
         window.handleOrder = async function(oid, action) {
-            const allOrders = await new Promise(res => { onSnapshot(collection(db, "orders"), s => res(s.docs.map(d=>({id:d.id,...d.data()}))), {onlyOnce:true}); });
+            const allOrders = await new Promise(res => { 
+                onSnapshot(collection(db, "orders"), s => res(s.docs.map(d=>({id:d.id,...d.data()}))), {onlyOnce:true}); 
+            });
             const order = allOrders.find(o => o.id === oid);
             if(!order) return;
+
             if(action === 'approve') {
                 const user = users.find(u => u.id === order.uid);
                 if(!user || user.balance < order.itemPrice) return alert("رصيد العضو غير كافي!");
@@ -386,43 +394,75 @@
             const table = document.getElementById('usersTable');
             const filtered = users.filter(u => u.nickname.toLowerCase().includes(sVal));
             table.innerHTML = `<tr><th>العضو</th><th>الرصيد</th><th>أكشن</th></tr>` + 
-            filtered.map(u => `<tr><td>${u.nickname} ${u.role==='dev'?'⭐':''}</td><td>${formatNum(u.balance)}</td><td><button onclick="editBalance('${u.id}', '${u.nickname}', ${u.balance})" style="color:#00f2ff;background:none;border:none;"><i class="fas fa-coins"></i></button><button onclick="delUsr('${u.id}')" style="color:red;background:none;border:none;margin-right:5px;"><i class="fas fa-trash"></i></button></td></tr>`).join('');
+            filtered.map(u => `<tr><td>${u.nickname} ${u.role==='admin'?'⭐':''}</td><td>${formatNum(u.balance)}</td><td><button onclick="editBalance('${u.id}', '${u.nickname}', ${u.balance})" style="color:#00f2ff;background:none;border:none;"><i class="fas fa-coins"></i></button><button onclick="delUsr('${u.id}')" style="color:red;background:none;border:none;margin-right:5px;"><i class="fas fa-trash"></i></button></td></tr>`).join('');
         }
 
         window.editBalance = async function(id, name, current) {
-            const val = prompt(`تعديل رصيد ${name}:`);
-            if(val && !isNaN(val)) { await updateDoc(doc(db, "users", id), { balance: current + parseInt(val) }); showToast("تم التحديث ✅"); }
+            const val = prompt(`تعديل رصيد ${name} (أدخل قيمة موجبة للإضافة وسالبة للخصم):`);
+            if(val && !isNaN(val)) { 
+                await updateDoc(doc(db, "users", id), { balance: current + parseInt(val) }); 
+                showToast("تم التحديث ✅"); 
+            }
         }
 
         window.addNewUser = async function(role) {
-            const n = document.getElementById('nNick').value, u = document.getElementById('nUser').value, p = document.getElementById('nPass').value, b = parseInt(document.getElementById('nBal').value || 0);
+            const n = document.getElementById('nNick').value, 
+                  u = document.getElementById('nUser').value, 
+                  p = document.getElementById('nPass').value, 
+                  b = parseInt(document.getElementById('nBal').value || 0);
+            
             if(!n || !u || !p) return showToast("أكمل البيانات!");
-            if(users.find(x => x.user === u)) return showToast("موجود مسبقاً!");
+            
+            const exists = users.find(x => x.user === u || x.nickname === n);
+            if(exists) return showToast("اسم المستخدم أو اللقب موجود مسبقاً! ❌");
+
             await addDoc(collection(db, "users"), { nickname: n, user: u, pass: p, balance: b, role: role });
-            showToast("تمت إضافة العضو!");
+            
+            document.getElementById('nNick').value = "";
+            document.getElementById('nUser').value = "";
+            document.getElementById('nPass').value = "";
+            document.getElementById('nBal').value = "";
+            showToast("تمت إضافة العضو بنجاح!");
         }
 
         onSnapshot(collection(db, "shop"), (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             document.getElementById('shopList').innerHTML = items.map(i => `<div class="shop-item"><b>${i.name}</b><br>🪙 ${formatNum(i.price)}<br><button class="neon-btn" style="padding:5px; margin-top:5px; width:100%;" onclick="buy('${i.name}', ${i.price})">طلب شراء</button></div>`).join('');
+            
             const adminShop = document.getElementById('adminShopList');
-            if(adminShop) adminShop.innerHTML = items.map(i => `<button class="neon-btn" style="font-size:10px; border-color:red; color:red; padding:5px 10px;" onclick="delShopItem('${i.id}')">${i.name} 🗑️</button>`).join('');
+            if(adminShop) {
+                adminShop.innerHTML = items.map(i => `<button class="neon-btn" style="font-size:10px; border-color:red; color:red; padding:5px 10px;" onclick="delShopItem('${i.id}')">${i.name} 🗑️</button>`).join('');
+            }
         });
 
         window.addNewShopItem = async function() {
-            const name = document.getElementById('itemName').value, price = parseInt(document.getElementById('itemPrice').value);
-            if(name && !isNaN(price)) { await addDoc(collection(db, "shop"), { name: name, price: price }); showToast("تمت الإضافة ✅"); }
+            const name = document.getElementById('itemName').value, 
+                  price = parseInt(document.getElementById('itemPrice').value);
+            if(name && !isNaN(price)) { 
+                await addDoc(collection(db, "shop"), { name: name, price: price }); 
+                document.getElementById('itemName').value = "";
+                document.getElementById('itemPrice').value = "";
+                showToast("تمت إضافة السلعة ✅"); 
+            }
         }
 
         window.delShopItem = async function(id) {
-            if(confirm("حذف؟")) { await deleteDoc(doc(db, "shop", id)); showToast("تم الحذف"); }
+            if(confirm("هل تريد حذف هذه السلعة من المتجر نهائياً؟")) {
+                await deleteDoc(doc(db, "shop", id));
+                showToast("تم الحذف من المتجر 🗑️");
+            }
         }
 
         window.updateProfile = async function() {
-            const u = document.getElementById('editUser').value, p = document.getElementById('editPass').value;
+            const u = document.getElementById('editUser').value, 
+                  p = document.getElementById('editPass').value;
             if(!u || !p) return showToast("أكمل البيانات!");
+
+            const exists = users.find(x => (x.user === u) && x.id !== currentUser.id);
+            if(exists) return showToast("اسم المستخدم هذا مأخوذ! ❌");
+
             await updateDoc(doc(db, "users", currentUser.id), { user: u, pass: p });
-            showToast("تم التحديث ✅");
+            showToast("تم تحديث بياناتك ✅");
         }
 
         window.updateBankList = function() {
@@ -430,33 +470,60 @@
             const sel = document.getElementById('targetUser');
             sel.innerHTML = '<option value="">-- اختر المستلم --</option>';
             users.filter(x => x.nickname.toLowerCase().includes(s) && x.id !== currentUser.id).forEach(x => { 
-                let o = document.createElement('option'); o.value = x.id; o.text = x.nickname; sel.add(o); 
+                let o = document.createElement('option'); 
+                o.value = x.id; 
+                o.text = x.nickname; 
+                sel.add(o); 
             });
         }
 
-        window.showTab = function(id) { document.querySelectorAll('.section').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-        window.toggleDiv = function(id) { const d = document.getElementById(id); d.style.display = d.style.display==='none'?'block':'none'; }
+        window.showTab = function(id) { 
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active')); 
+            document.getElementById(id).classList.add('active'); 
+        }
+        
+        window.toggleDiv = function(id) { 
+            const d = document.getElementById(id); 
+            d.style.display = d.style.display==='none'?'block':'none'; 
+        }
+        
         window.delUsr = async function(id) { 
             const target = users.find(u => u.id === id);
-            if(target && (target.role === 'dev' || target.user === 'developer')) return showToast("لا يمكن حذف المطور!");
-            if(confirm("حذف الحساب؟")) { await deleteDoc(doc(db, "users", id)); showToast("تم الحذف 🗑️"); } 
+            if(target && (target.role === 'dev' || target.user === 'سليمان')) {
+                return showToast("لا يمكن حذف حساب المطور! ❌");
+            }
+            if(confirm("هل أنت متأكد من حذف هذا الحساب نهائياً؟")) { 
+                await deleteDoc(doc(db, "users", id)); 
+                showToast("تم حذف الحساب 🗑️"); 
+            } 
         }
-        window.togglePassVis = function(id) { const x = document.getElementById(id); x.type = (x.type === "password") ? "text" : "password"; }
+
+        window.togglePassVis = function(id) {
+            const x = document.getElementById(id);
+            if (x.type === "password") {
+                x.type = "text";
+            } else {
+                x.type = "password";
+            }
+        }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
         let isM = false;
         function toggleMusic() {
             const f = document.getElementById('ytPlayer');
-            if(!isM) { f.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*'); isM = true; showToast("تم تشغيل الموسيقى ❤️‍🩹"); } 
-            else { f.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*'); isM = false; showToast("تم الإيقاف 🔇"); }
+            if(!isM) { f.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*'); isM = true; showToast("تم تشغيل القران الكريم انصت 🎶"); } 
+            else { f.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*'); isM = false; showToast("تم ايقاف القران الكريم 🔇"); }
         }
         function setTheme(m) {
             const root = document.documentElement;
-            if (m === 'boy') { root.style.setProperty('--neon-blue', '#00f2ff'); document.getElementById('bodyTag').style.backgroundColor = "#0d0d0d"; showToast("ثيم ولادي ☠️"); } 
-            else { root.style.setProperty('--neon-blue', '#ff69b4'); document.getElementById('bodyTag').style.backgroundColor = "#1a0d14"; showToast("ثيم بناتي 💕"); }
+            if (m === 'boy') { root.style.setProperty('--neon-blue', '#00f2ff'); document.getElementById('bodyTag').style.backgroundColor = "#0d0d0d"; showToast("تم تفعيل الثيم الأزرق ☠️"); } 
+            else { root.style.setProperty('--neon-blue', '#ff69b4'); document.getElementById('bodyTag').style.backgroundColor = "#1a0d14"; showToast("تم تفعيل الثيم الوردي 💕"); }
         }
         function showToast(m) { Toastify({ text: m, duration: 3000, gravity: "top", position: "center", style: { background: "var(--neon-blue)", color: "black", fontWeight: "bold", borderRadius: "10px" } }).showToast(); }
+        window.onload = () => { setTimeout(() => { const loader = document.getElementById('loader'); if(loader) loader.style.display = 'none'; }, 1000); };
     </script>
 </body>
 </html>
+
+            
